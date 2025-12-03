@@ -4,6 +4,7 @@ namespace UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetection
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using UglyToad.PdfPig.Content;
     using UglyToad.PdfPig.Core;
 
@@ -18,12 +19,12 @@ namespace UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetection
         public PdfRectangle BoundingBox { get; }
 
         /// <summary>
-        /// The row index of the cell (0-based).
+        /// The row index of the cell (0-based, where 0 is the topmost row).
         /// </summary>
         public int RowIndex { get; }
 
         /// <summary>
-        /// The column index of the cell (0-based).
+        /// The column index of the cell (0-based, where 0 is the leftmost column).
         /// </summary>
         public int ColumnIndex { get; }
 
@@ -114,7 +115,7 @@ namespace UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetection
                     return a.BoundingBox.Left.CompareTo(b.BoundingBox.Left);
                 });
 
-                Text = string.Join(" ", System.Linq.Enumerable.Select(sortedWords, w => w.Text));
+                Text = string.Join(" ", sortedWords.Select(w => w.Text));
             }
         }
 

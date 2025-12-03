@@ -13,6 +13,16 @@ namespace UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetection
     /// Detects tables in PDF pages using ruled lines (stroked paths).
     /// This detector works by identifying horizontal and vertical lines that form table grids.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Tables are detected by analyzing the stroked paths in a PDF page. Horizontal and vertical
+    /// lines are identified based on angle tolerance, and their intersections define the table grid.
+    /// </para>
+    /// <para>
+    /// Row indexing follows a top-to-bottom convention where row 0 is the topmost row.
+    /// This differs from PDF's coordinate system where the origin is at the bottom-left.
+    /// </para>
+    /// </remarks>
     public class RuledLineTableDetector : ITableDetector
     {
         /// <summary>
@@ -154,7 +164,7 @@ namespace UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetection
         private bool IsVertical(PdfSubpath.Line line)
         {
             var angle = Math.Abs(Math.Atan2(line.To.Y - line.From.Y, line.To.X - line.From.X) * 180 / Math.PI);
-            return Math.Abs(angle - 90) <= options.AngleTolerance || Math.Abs(angle + 90) <= options.AngleTolerance;
+            return Math.Abs(angle - 90) <= options.AngleTolerance;
         }
 
         private class TableRegion
