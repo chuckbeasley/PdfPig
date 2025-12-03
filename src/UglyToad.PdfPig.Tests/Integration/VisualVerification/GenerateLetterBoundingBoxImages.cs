@@ -147,6 +147,13 @@
             Run(Type3FontZeroHeight, 1255);
         }
 
+        [Fact]
+        public void test_a()
+        {
+            // Rendered glyphs are not correct, but we use the grid to assess
+            Run("test_a", 1584, 1);
+        }
+
         private static void Run(string file, int imageHeight = 792, int pageNo = 1)
         {
             var pdfFileName = GetFilename(file);
@@ -193,6 +200,32 @@
                         d.SaveTo(fs);
                     }
                 }
+
+                using (var bitmap = SKBitmap.FromImage(image))
+                using (var graphics = new SKCanvas(bitmap))
+                {
+                    foreach (var letter in page.Letters)
+                    {
+                        DrawRectangle(letter.GlyphRectangleLoose, graphics, violetPen, imageHeight, scale);
+                    }
+
+                    graphics.Flush();
+
+                    var imageName = $"{file}_loose.jpg";
+
+                    if (!Directory.Exists(OutputPath))
+                    {
+                        Directory.CreateDirectory(OutputPath);
+                    }
+
+                    var savePath = Path.Combine(OutputPath, imageName);
+
+                    using (var fs = new FileStream(savePath, FileMode.Create))
+                    using (SKData d = bitmap.Encode(SKEncodedImageFormat.Jpeg, 100))
+                    {
+                        d.SaveTo(fs);
+                    }
+                }
             }
         }
 
@@ -220,7 +253,11 @@
 
             pdf = pdf.Replace(".pdf", ".jpg");
 
-            return SKImage.FromEncodedData(pdf);
+            if (File.Exists(pdf))
+            {
+                return SKImage.FromEncodedData(pdf);
+            }
+            return SKImage.FromEncodedData(pdf.Replace(".jpg", ".png"));
         }
     }
 }

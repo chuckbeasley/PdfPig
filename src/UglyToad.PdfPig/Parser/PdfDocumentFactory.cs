@@ -16,19 +16,19 @@
     using Graphics;
     using Outline;
     using Parts;
-    using Parts.CrossReference;
     using PdfFonts;
     using PdfFonts.Parser;
     using PdfFonts.Parser.Handlers;
     using PdfFonts.Parser.Parts;
     using Tokenization.Scanner;
     using Tokens;
+    using UglyToad.PdfPig.PdfFonts.Cmap;
 
     internal static class PdfDocumentFactory
     {
-        public static PdfDocument Open(byte[] fileBytes, ParsingOptions? options = null)
+        public static PdfDocument Open(ReadOnlyMemory<byte> memory, ParsingOptions? options = null)
         {
-            var inputBytes = new MemoryInputBytes(fileBytes);
+            var inputBytes = new MemoryInputBytes(memory);
 
             return Open(inputBytes, options);
         }
@@ -45,9 +45,23 @@
 
         internal static PdfDocument Open(Stream stream, ParsingOptions? options)
         {
-            var initialPosition = stream.Position;
-
-            var streamInput = new StreamInputBytes(stream, false);
+            StreamInputBytes streamInput;
+            long initialPosition;
+            
+            if (stream is { CanRead: true, CanSeek: false })
+            {
+                // We need the stream to be seekable
+                var ms = new MemoryStream();
+                stream.CopyTo(ms); // Copy the non seekable stream in memory (seekable)
+                ms.Position = 0;
+                streamInput = new StreamInputBytes(ms, true); // The created memory stream will be disposed on document dispose
+                initialPosition = ms.Position;
+            }
+            else
+            {
+                streamInput = new StreamInputBytes(stream, false);
+                initialPosition = stream.Position;
+            }
 
             try
             {
@@ -108,40 +122,31 @@
         {
             var filterProvider = new FilterProviderWithLookup(parsingOptions.FilterProvider ?? DefaultFilterProvider.Instance);
 
-            CrossReferenceTable? crossReferenceTable = null;
-
-            var xrefValidator = new XrefOffsetValidator(parsingOptions.Logger);
-
-            // We're ok with this since our intent is to lazily load the cross reference table.
-            // ReSharper disable once AccessToModifiedClosure
-            var locationProvider = new ObjectLocationProvider(() => crossReferenceTable, inputBytes);
-            var pdfScanner = new PdfTokenScanner(inputBytes, locationProvider, filterProvider, NoOpEncryptionHandler.Instance, parsingOptions);
-
-            var crossReferenceStreamParser = new CrossReferenceStreamParser(filterProvider);
-            var crossReferenceParser = new CrossReferenceParser(parsingOptions.Logger, xrefValidator, crossReferenceStreamParser);
-
             var version = FileHeaderParser.Parse(scanner, inputBytes, parsingOptions.UseLenientParsing, parsingOptions.Logger);
 
-            var crossReferenceOffset = FileTrailerParser.GetFirstCrossReferenceOffset(
+            var initialParse = FirstPassParser.Parse(
+                new FileHeaderOffset((int)version.OffsetInFile),
                 inputBytes,
                 scanner,
-                parsingOptions.UseLenientParsing) + version.OffsetInFile;
+                parsingOptions.Logger);
 
-            // TODO: make this use the scanner.
-            var validator = new CrossReferenceOffsetValidator(xrefValidator);
+            if (initialParse.Trailer == null)
+            {
+                throw new PdfDocumentFormatException(
+                    "Could not find an xref trailer or stream dictionary in the input file.");
+            }
 
-            crossReferenceOffset = validator.Validate(crossReferenceOffset, scanner, inputBytes, parsingOptions.UseLenientParsing);
+            var trailer = new TrailerDictionary(initialParse.Trailer, parsingOptions.UseLenientParsing);
 
-            crossReferenceTable = crossReferenceParser.Parse(
-                inputBytes,
-                parsingOptions.UseLenientParsing,
-                crossReferenceOffset,
-                version.OffsetInFile,
-                pdfScanner,
-                scanner);
+            var locationProvider = new ObjectLocationProvider(
+                initialParse.XrefOffsets,
+                initialParse.BruteForceOffsets,
+                inputBytes);
+
+            var pdfScanner = new PdfTokenScanner(inputBytes, locationProvider, filterProvider, NoOpEncryptionHandler.Instance, parsingOptions);
 
             var (rootReference, rootDictionary) = ParseTrailer(
-                crossReferenceTable,
+                trailer,
                 parsingOptions.UseLenientParsing,
                 pdfScanner,
                 out var encryptionDictionary);
@@ -149,7 +154,7 @@
             var encryptionHandler = encryptionDictionary != null ?
                 (IEncryptionHandler)new EncryptionHandler(
                     encryptionDictionary,
-                    crossReferenceTable.Trailer,
+                    trailer,
                     parsingOptions.Passwords)
                 : NoOpEncryptionHandler.Instance;
 
@@ -162,22 +167,27 @@
 
             var encodingReader = new EncodingReader(pdfScanner);
 
+            var cmapCache = new CMapLocalCache(filterProvider, pdfScanner);
+
             var type0Handler = new Type0FontHandler(
                 cidFontFactory,
-                filterProvider,
                 pdfScanner,
+                cmapCache,
                 parsingOptions);
 
             var type1Handler = new Type1FontHandler(
                 pdfScanner,
                 filterProvider,
                 encodingReader,
+                cmapCache,
                 parsingOptions.UseLenientParsing);
 
-            var trueTypeHandler = new TrueTypeFontHandler(parsingOptions.Logger,
+            var trueTypeHandler = new TrueTypeFontHandler(
+                parsingOptions.Logger,
                 pdfScanner,
                 filterProvider,
                 encodingReader,
+                cmapCache,
                 SystemFontFinder.Instance,
                 type1Handler);
 
@@ -186,13 +196,13 @@
                 type0Handler,
                 trueTypeHandler,
                 type1Handler,
-                new Type3FontHandler(pdfScanner, filterProvider, encodingReader));
+                new Type3FontHandler(pdfScanner, encodingReader, cmapCache));
 
             var resourceContainer = new ResourceStore(pdfScanner, fontFactory, filterProvider, parsingOptions);
 
             var information = DocumentInformationFactory.Create(
                 pdfScanner,
-                crossReferenceTable.Trailer,
+                trailer,
                 parsingOptions.UseLenientParsing);
 
             var pageFactory = new PageFactory(pdfScanner, resourceContainer, filterProvider,
@@ -206,13 +216,15 @@
                 parsingOptions.Logger,
                 parsingOptions.UseLenientParsing);
 
-            var acroFormFactory = new AcroFormFactory(pdfScanner, filterProvider, crossReferenceTable);
+            var acroFormFactory = new AcroFormFactory(pdfScanner,
+                filterProvider,
+                initialParse.BruteForceOffsets ?? initialParse.XrefOffsets);
+
             var bookmarksProvider = new BookmarksProvider(parsingOptions.Logger, pdfScanner);
 
             return new PdfDocument(
                 inputBytes,
                 version,
-                crossReferenceTable,
                 catalog,
                 information,
                 encryptionDictionary,
@@ -224,38 +236,43 @@
         }
 
         private static (IndirectReference, DictionaryToken) ParseTrailer(
-            CrossReferenceTable crossReferenceTable,
+            TrailerDictionary trailer,
             bool isLenientParsing,
             IPdfTokenScanner pdfTokenScanner,
             [NotNullWhen(true)] out EncryptionDictionary? encryptionDictionary)
         {
-            encryptionDictionary = GetEncryptionDictionary(crossReferenceTable, pdfTokenScanner);
+            encryptionDictionary = GetEncryptionDictionary(trailer, pdfTokenScanner);
 
-            var rootDictionary = DirectObjectFinder.Get<DictionaryToken>(crossReferenceTable.Trailer.Root, pdfTokenScanner)!;
+            var rootDictionary = DirectObjectFinder.Get<DictionaryToken>(trailer.Root, pdfTokenScanner)!;
+
+            if (rootDictionary is null)
+            {
+                throw new PdfDocumentFormatException($"The root object in the trailer did not resolve to a readable dictionary.");
+            }
 
             if (!rootDictionary.ContainsKey(NameToken.Type) && isLenientParsing)
             {
                 rootDictionary = rootDictionary.With(NameToken.Type, NameToken.Catalog);
             }
 
-            return (crossReferenceTable.Trailer.Root, rootDictionary);
+            return (trailer.Root, rootDictionary);
         }
 
-        private static EncryptionDictionary? GetEncryptionDictionary(CrossReferenceTable crossReferenceTable, IPdfTokenScanner pdfTokenScanner)
+        private static EncryptionDictionary? GetEncryptionDictionary(TrailerDictionary trailer, IPdfTokenScanner pdfTokenScanner)
         {
-            if (crossReferenceTable.Trailer.EncryptionToken is null)
+            if (trailer.EncryptionToken is null)
             {
                 return null;
             }
 
-            if (!DirectObjectFinder.TryGet(crossReferenceTable.Trailer.EncryptionToken, pdfTokenScanner, out DictionaryToken? encryptionDictionaryToken))
+            if (!DirectObjectFinder.TryGet(trailer.EncryptionToken, pdfTokenScanner, out DictionaryToken? encryptionDictionaryToken))
             {
-                if (DirectObjectFinder.TryGet(crossReferenceTable.Trailer.EncryptionToken, pdfTokenScanner, out NullToken? _))
+                if (DirectObjectFinder.TryGet(trailer.EncryptionToken, pdfTokenScanner, out NullToken? _))
                 {
                     return null;
                 }
 
-                throw new PdfDocumentFormatException($"Unrecognized encryption token in trailer: {crossReferenceTable.Trailer.EncryptionToken}.");
+                throw new PdfDocumentFormatException($"Unrecognized encryption token in trailer: {trailer.EncryptionToken}.");
             }
 
             var result = EncryptionDictionaryFactory.Read(encryptionDictionaryToken, pdfTokenScanner);

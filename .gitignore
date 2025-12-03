@@ -248,3 +248,5 @@ _Pvt_Extensions
 /tools/ConsoleRunner/Properties/launchSettings.json
 
 /docs/doxygen
+/tools/UglyToad.PdfPig.ConsoleRunner/Properties/launchSettings.json
+/src/UglyToad.PdfPig.Tests/Images/Files/Pdf/indexed-png-with-mask.png

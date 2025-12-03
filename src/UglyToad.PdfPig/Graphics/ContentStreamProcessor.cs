@@ -100,12 +100,6 @@ namespace UglyToad.PdfPig.Graphics
             var transformedGlyphBounds = PerformantRectangleTransformer
                 .Transform(renderingMatrix, textMatrix, transformationMatrix, characterBoundingBox.GlyphBounds);
             
-            var transformedPdfBounds = PerformantRectangleTransformer
-                .Transform(renderingMatrix,
-                    textMatrix,
-                    transformationMatrix,
-                    new PdfRectangle(0, 0, characterBoundingBox.Width, UserSpaceUnit.PointMultiples));
-
             if (ParsingOptions.ClipPaths)
             {
                 var currentClipping = currentState.CurrentClippingPath;
@@ -129,11 +123,12 @@ namespace UglyToad.PdfPig.Graphics
                     letter = new Letter(
                         newLetter,
                         attachTo.GlyphRectangle,
+                        attachTo.GlyphRectangleLoose,
                         attachTo.StartBaseLine,
                         attachTo.EndBaseLine,
                         attachTo.Width,
                         attachTo.FontSize,
-                        attachTo.Font,
+                        attachTo.GetFont()!,
                         attachTo.RenderingMode,
                         attachTo.StrokeColor,
                         attachTo.FillColor,
@@ -151,14 +146,30 @@ namespace UglyToad.PdfPig.Graphics
             // If we did not create a letter for a combined diacritic, create one here.
             if (letter is null)
             {
+                var transformedPdfBounds = PerformantRectangleTransformer
+                    .Transform(renderingMatrix,
+                        textMatrix,
+                        transformationMatrix,
+                        new PdfRectangle(0, 0, characterBoundingBox.Width, UserSpaceUnit.PointMultiples));
+
+                var looseBox = PerformantRectangleTransformer
+                    .Transform(renderingMatrix,
+                        textMatrix,
+                        transformationMatrix,
+                        new PdfRectangle(0,
+                            font.GetDescent(),
+                            characterBoundingBox.Width,
+                            font.GetAscent()));
+
                 letter = new Letter(
                     unicode,
                     isBboxValid ? transformedGlyphBounds : transformedPdfBounds,
+                    looseBox,
                     transformedPdfBounds.BottomLeft,
                     transformedPdfBounds.BottomRight,
                     transformedPdfBounds.Width,
                     fontSize,
-                    font.Details,
+                    font,
                     currentState.FontState.TextRenderingMode,
                     currentState.CurrentStrokingColor!,
                     currentState.CurrentNonStrokingColor!,
@@ -167,7 +178,6 @@ namespace UglyToad.PdfPig.Graphics
             }
 
             letters.Add(letter);
-
             markedContentStack.AddLetter(letter);
         }
 
@@ -442,6 +452,7 @@ namespace UglyToad.PdfPig.Graphics
         {
             // https://github.com/apache/pdfbox/blob/f4bfe47de37f6fe69e8f98b164c3546facfd5e91/pdfbox/src/main/java/org/apache/pdfbox/contentstream/PDFStreamEngine.java#L611
             var graphicsState = GetCurrentState();
+            rectangle = graphicsState.CurrentTransformationMatrix.Transform(rectangle).Normalise();
             var clip = rectangle.ToPdfPath();
             clip.SetClipping(clippingRule);
 

@@ -22,6 +22,8 @@
             = new Dictionary<int, CharacterBoundingBox>();
 
         private readonly bool useLenientParsing;
+        private readonly double ascent;
+        private readonly double descent;
 
         public NameToken Name => BaseFont;
 
@@ -57,6 +59,30 @@
                       ?? FontDetails.GetDefault(Name.Data);
 
             useLenientParsing = parsingOptions.UseLenientParsing;
+            ascent = ComputeAscent();
+            descent = ComputeDescent();
+        }
+
+        private double ComputeDescent()
+        {
+            double d = CidFont.GetDescent();
+            if (Math.Abs(d) > double.Epsilon)
+            {
+                return GetFontMatrix().TransformY(d);
+            }
+
+            return -0.25;
+        }
+
+        private double ComputeAscent()
+        {
+            double a = CidFont.GetAscent();
+            if (Math.Abs(a) > double.Epsilon)
+            {
+                return GetFontMatrix().TransformY(a);
+            }
+
+            return 0.75;
         }
 
         public int ReadCharacterCode(IInputBytes bytes, out int codeLength)
@@ -131,8 +157,6 @@
             var width = CidFont.GetWidthFromFont(characterIdentifier);
 
             var advanceWidth = GetFontMatrix().TransformX(width);
-            // BobLD: Not sure why we don't need CidFont.GetFontMatrix(characterCode)
-            // Might be related to https://github.com/veraPDF/veraPDF-library/issues/1010
 
             var result = new CharacterBoundingBox(boundingBox, advanceWidth);
 
@@ -144,6 +168,16 @@
         public TransformationMatrix GetFontMatrix()
         {
             return CidFont.FontMatrix;
+        }
+
+        public double GetDescent()
+        {
+            return descent;
+        }
+
+        public double GetAscent()
+        {
+            return ascent;
         }
 
         public PdfVector GetPositionVector(int characterCode)

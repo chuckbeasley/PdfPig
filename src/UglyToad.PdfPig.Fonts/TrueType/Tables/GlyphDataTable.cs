@@ -121,14 +121,23 @@
 
             for (var i = 0; i < glyphCount; i++)
             {
-                if (offsets[i + 1] <= offsets[i])
+                var offset = offsets[i];
+
+                if (offsets[i + 1] <= offset)
                 {
                     // empty glyph
                     result[i] = emptyGlyph;
                     continue;
                 }
 
-                data.Seek(offsets[i]);
+                // Invalid table, just sub in the empty glyph
+                if (offset >= data.Length)
+                {
+                    result[i] = emptyGlyph;
+                    continue;
+                }
+
+                data.Seek(offset);
 
                 var contourCount = data.ReadSignedShort();
 
@@ -231,9 +240,15 @@
                 flags = (CompositeGlyphFlags)data.ReadUnsignedShort();
                 var glyphIndex = data.ReadUnsignedShort();
 
-                var childGlyph = glyphs[glyphIndex];
+                if (glyphIndex >= glyphs.Length)
+                {
+                    // Unsure why this happens but fixes #1213
+                    continue; // TODO - Is there a better fix?
+                }
 
-                if (childGlyph == null)
+                IGlyphDescription? childGlyph = glyphs[glyphIndex];
+
+                if (childGlyph is null)
                 {
                     if (!compositeLocations.TryGetValue(glyphIndex, out var missingComposite))
                     {
@@ -310,7 +325,7 @@
                 }
             }
 
-            builderGlyph = builderGlyph ?? emptyGlyph;
+            builderGlyph ??= emptyGlyph;
 
             return new Glyph(false, builderGlyph.Instructions, builderGlyph.EndPointsOfContours, builderGlyph.Points, compositeLocation.Bounds);
         }
@@ -329,7 +344,15 @@
 
                     for (int j = 0; j < numberOfRepeats; j++)
                     {
-                        result[i + j + 1] = result[i];
+                        int p = i + j + 1;
+                        if (p >= result.Length)
+                        {
+                            // Unsure why this happens but fixes #1199
+                            // TODO - Is there a better fix?
+                            break;
+                        }
+
+                        result[p] = result[i];
                     }
 
                     i += numberOfRepeats;
@@ -409,7 +432,7 @@
             }
         }
 
-        private class CompositeComponent
+        private sealed class CompositeComponent
         {
             public int Index { get; }
 

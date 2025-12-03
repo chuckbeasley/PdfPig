@@ -47,6 +47,12 @@
         public PdfRectangle GlyphRectangle { get; }
 
         /// <summary>
+        /// The loose bounding box for the glyph. Contrary to the <see cref="GlyphRectangle"/>, the loose bounding box will be the same across all glyphes of the same font.
+        /// It takes in account the font Ascent and Descent.
+        /// </summary>
+        public PdfRectangle GlyphRectangleLoose { get; }
+
+        /// <summary>
         /// Size as defined in the PDF file. This is not equivalent to font size in points but is relative to other font sizes on the page.
         /// </summary>
         public double FontSize { get; }
@@ -54,12 +60,20 @@
         /// <summary>
         /// The name of the font.
         /// </summary>
-        public string? FontName => Font?.Name;
+        public string? FontName => FontDetails?.Name;
 
         /// <summary>
         /// Details about the font for this letter.
         /// </summary>
-        public FontDetails Font { get; }
+        public FontDetails FontDetails { get; }
+
+        /// <summary>
+        /// Details about the font for this letter.
+        /// </summary>
+        [Obsolete("Use FontDetails instead.")]
+        public FontDetails Font => FontDetails;
+
+        private readonly IFont? _font;
 
         /// <summary>
         /// Text rendering mode that indicates whether we should draw this letter's strokes,
@@ -100,12 +114,58 @@
         /// <summary>
         /// Create a new letter to represent some text drawn by the Tj operator.
         /// </summary>
-        public Letter(string value, PdfRectangle glyphRectangle,
+        public Letter(string value,
+            PdfRectangle glyphRectangle,
+            PdfRectangle glyphRectangleLoose,
             PdfPoint startBaseLine,
             PdfPoint endBaseLine,
             double width,
             double fontSize,
-            FontDetails font,
+            IFont font,
+            TextRenderingMode renderingMode,
+            IColor strokeColor,
+            IColor fillColor,
+            double pointSize,
+            int textSequence) :
+                this(value, glyphRectangle, glyphRectangleLoose,
+                    startBaseLine, endBaseLine,
+                    width, fontSize, font.Details, font,
+                    renderingMode, strokeColor, fillColor,
+                    pointSize, textSequence)
+        { }
+
+        /// <summary>
+        /// Create a new letter to represent some text drawn by the Tj operator.
+        /// </summary>
+        public Letter(string value,
+            PdfRectangle glyphRectangle,
+            PdfRectangle glyphRectangleLoose,
+            PdfPoint startBaseLine,
+            PdfPoint endBaseLine,
+            double width,
+            double fontSize,
+            FontDetails fontDetails,
+            TextRenderingMode renderingMode,
+            IColor strokeColor,
+            IColor fillColor,
+            double pointSize,
+            int textSequence): 
+                this(value, glyphRectangle, glyphRectangleLoose,
+                    startBaseLine, endBaseLine,
+                    width, fontSize, fontDetails, null,
+                    renderingMode, strokeColor, fillColor,
+                    pointSize, textSequence)
+        { }
+
+        private Letter(string value,
+            PdfRectangle glyphRectangle,
+            PdfRectangle glyphRectangleLoose,
+            PdfPoint startBaseLine,
+            PdfPoint endBaseLine,
+            double width,
+            double fontSize,
+            FontDetails fontDetails,
+            IFont? font,
             TextRenderingMode renderingMode,
             IColor strokeColor,
             IColor fillColor,
@@ -114,11 +174,13 @@
         {
             Value = value;
             GlyphRectangle = glyphRectangle;
+            GlyphRectangleLoose = glyphRectangleLoose;
             StartBaseLine = startBaseLine;
             EndBaseLine = endBaseLine;
             Width = width;
             FontSize = fontSize;
-            Font = font;
+            FontDetails = fontDetails;
+            _font = font;
             RenderingMode = renderingMode;
             if (renderingMode == TextRenderingMode.Stroke)
             {
@@ -135,6 +197,43 @@
             TextOrientation = GetTextOrientation();
         }
 
+        /// <summary>
+        /// Creates a new <see cref="Letter"/> instance with the same properties as the current instance,
+        /// but with the font details set to bold.
+        /// </summary>
+        /// <returns>
+        /// A new <see cref="Letter"/> instance with bold font details.
+        /// </returns>
+        public Letter AsBold()
+        {
+            return new Letter(Value,
+                GlyphRectangle,
+                GlyphRectangleLoose,
+                StartBaseLine,
+                EndBaseLine,
+                Width,
+                FontSize,
+                FontDetails.AsBold(),
+                _font,
+                RenderingMode,
+                StrokeColor,
+                FillColor,
+                PointSize,
+                TextSequence);
+        }
+
+        /// <summary>
+        /// Retrieves the font associated with this letter, if available.
+        /// </summary>
+        /// <returns>
+        /// The <see cref="IFont"/> instance representing the font used for this letter, 
+        /// or <c>null</c> if no font is associated.
+        /// </returns>
+        public IFont? GetFont()
+        {
+            return _font;
+        }
+        
         private TextOrientation GetTextOrientation()
         {
             if (Math.Abs(StartBaseLine.Y - EndBaseLine.Y) < 10e-5)

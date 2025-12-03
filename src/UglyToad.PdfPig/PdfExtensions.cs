@@ -2,11 +2,13 @@
 {
     using System;
     using System.Diagnostics.CodeAnalysis;
+    using System.Linq;
     using Core;
     using Filters;
     using Parser.Parts;
     using Tokenization.Scanner;
     using Tokens;
+    using UglyToad.PdfPig.Util;
 
     /// <summary>
     /// Extensions for PDF types.
@@ -62,6 +64,7 @@
             double totalMaxEstSize = stream.Data.Length * 100;
 
             var transform = stream.Data;
+
             for (var i = 0; i < filters.Count; i++)
             {
                 var filter = filters[i];
@@ -89,6 +92,7 @@
             double totalMaxEstSize = stream.Data.Length * 100;
 
             var transform = stream.Data;
+
             for (var i = 0; i < filters.Count; i++)
             {
                 var filter = filters[i];
@@ -151,6 +155,23 @@
                         visited.Add(reference.Data);
                     }
                     resolvedItems[NameToken.Create(kvp.Key)] = ResolveInternal(value, scanner, visited);
+                }
+
+                if (resolvedItems.Count != dict.Data.Count)
+                {
+                    if (resolvedItems.Count > dict.Data.Count)
+                    {
+                        throw new InvalidOperationException("Resolved more items than were present in the original dictionary. This should not be possible.");
+                    }
+
+                    // We missed some due to cycles, try and resolve them now.
+                    foreach (var missing in dict.Data.Keys.Except(resolvedItems.Keys.Select(k => k.Data), StringComparer.OrdinalIgnoreCase))
+                    {
+                        if (dict.Data[missing] is IndirectReferenceToken reference)
+                        {
+                            resolvedItems[NameToken.Create(missing)] = ResolveInternal(reference, scanner, visited);
+                        }
+                    }
                 }
 
                 return new DictionaryToken(resolvedItems);

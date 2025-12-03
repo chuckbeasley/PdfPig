@@ -7,7 +7,6 @@
     using AcroForms;
     using Content;
     using Core;
-    using CrossReference;
     using Encryption;
     using Exceptions;
     using Filters;
@@ -70,7 +69,6 @@
         internal PdfDocument(
             IInputBytes inputBytes,
             HeaderVersion version,
-            CrossReferenceTable crossReferenceTable,
             Catalog catalog,
             DocumentInformation information,
             EncryptionDictionary? encryptionDictionary,
@@ -91,7 +89,7 @@
             Information = information ?? throw new ArgumentNullException(nameof(information));
             pages = catalog.Pages;
             namedDestinations = catalog.NamedDestinations;
-            Structure = new Structure(catalog, crossReferenceTable, pdfScanner);
+            Structure = new Structure(catalog, pdfScanner);
             Advanced = new AdvancedPdfDocumentAccess(pdfScanner, filterProvider, catalog);
             documentForm = new Lazy<AcroForm>(() => acroFormFactory.GetAcroForm(catalog)!);
         }
@@ -105,6 +103,14 @@
         public static PdfDocument Open(byte[] fileBytes, ParsingOptions? options = null) => PdfDocumentFactory.Open(fileBytes, options);
 
         /// <summary>
+        /// Creates a <see cref="PdfDocument"/> for reading from the provided file bytes.
+        /// </summary>
+        /// <param name="memory">The bytes of the PDF file.</param>
+        /// <param name="options">Optional parameters controlling parsing.</param>
+        /// <returns>A <see cref="PdfDocument"/> providing access to the file contents.</returns>
+        public static PdfDocument Open(ReadOnlyMemory<byte> memory, ParsingOptions? options = null) => PdfDocumentFactory.Open(memory, options);
+
+        /// <summary>
         /// Opens a file and creates a <see cref="PdfDocument"/> for reading from the provided file path.
         /// </summary>
         /// <param name="filePath">The full path to the file location of the PDF file.</param>
@@ -114,10 +120,14 @@
 
         /// <summary>
         /// Creates a <see cref="PdfDocument"/> for reading from the provided stream.
+        /// <para>
+        /// If the stream provided is not seekable (<see cref="Stream.CanSeek"/> is <c>false</c>), the stream will be copied into a new <see cref="MemoryStream"/>.
+        /// </para>
         /// The caller must manage disposing the stream. The created PdfDocument will not dispose the stream.
         /// </summary>
         /// <param name="stream">
         /// A stream of the file contents, this must support reading and seeking.
+        /// <para>If the stream provided is not seekable (<see cref="Stream.CanSeek"/> is <c>false</c>), the stream will be copied into a new <see cref="MemoryStream"/>.</para>
         /// The PdfDocument will not dispose of the provided stream.
         /// </param>
         /// <param name="options">Optional parameters controlling parsing.</param>
@@ -255,14 +265,14 @@
         /// Gets the bookmarks if this document contains some.
         /// </summary>
         /// <remarks>This will throw a <see cref="ObjectDisposedException"/> if called on a disposed <see cref="PdfDocument"/>.</remarks>
-        public bool TryGetBookmarks([NotNullWhen(true)] out Bookmarks? bookmarks)
+        public bool TryGetBookmarks([NotNullWhen(true)] out Bookmarks? bookmarks, bool allowContainerNode = false)
         {
             if (isDisposed)
             {
                 throw new ObjectDisposedException("Cannot access the bookmarks after the document is disposed.");
             }
 
-            bookmarks = bookmarksProvider.GetBookmarks(Structure.Catalog);
+            bookmarks = bookmarksProvider.GetBookmarks(Structure.Catalog, allowContainerNode);
 
             return bookmarks != null;
         }
