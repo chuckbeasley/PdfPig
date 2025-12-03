@@ -5,6 +5,8 @@ namespace UglyToad.PdfPig.Tests.Dla
     using UglyToad.PdfPig.Core;
     using UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetection;
     using UglyToad.PdfPig.Graphics;
+    using UglyToad.PdfPig.Graphics.Core;
+    using UglyToad.PdfPig.PdfFonts;
 
     public class TableDetectionTests
     {
@@ -271,6 +273,131 @@ namespace UglyToad.PdfPig.Tests.Dla
             subpath.MoveTo(x, y);
             subpath.LineTo(x, y + height);
             return subpath;
+        }
+
+        // WhitespaceTableDetector Tests
+
+        [Fact]
+        public void WhitespaceTableDetector_ReturnsEmptyWhenNoWordsProvided()
+        {
+            var detector = new WhitespaceTableDetector();
+            var words = new List<Word>();
+
+            var tables = detector.DetectTables(words, null);
+
+            Assert.Empty(tables);
+        }
+
+        [Fact]
+        public void WhitespaceTableDetector_DefaultInstance_IsNotNull()
+        {
+            Assert.NotNull(WhitespaceTableDetector.Instance);
+        }
+
+        [Fact]
+        public void WhitespaceTableDetector_DetectsSimpleTableFromWords()
+        {
+            var detector = new WhitespaceTableDetector(new WhitespaceTableDetector.WhitespaceTableDetectorOptions
+            {
+                MinColumns = 2,
+                MinRows = 2,
+                MinColumnGap = 10,
+                LineTolerance = 5
+            });
+
+            // Create words that form a 2x2 table:
+            // Row 1: "Name" at (0,100), "Age" at (100,100)
+            // Row 2: "John" at (0,80), "25" at (100,80)
+            var words = new List<Word>
+            {
+                CreateTestWord("Name", 0, 100, 40, 12),
+                CreateTestWord("Age", 100, 100, 30, 12),
+                CreateTestWord("John", 0, 80, 40, 12),
+                CreateTestWord("25", 100, 80, 20, 12)
+            };
+
+            var tables = detector.DetectTables(words, null);
+
+            Assert.Single(tables);
+            Assert.Equal(2, tables[0].RowCount);
+            Assert.Equal(2, tables[0].ColumnCount);
+        }
+
+        [Fact]
+        public void WhitespaceTableDetector_ReturnsEmptyForSingleColumnData()
+        {
+            var detector = new WhitespaceTableDetector(new WhitespaceTableDetector.WhitespaceTableDetectorOptions
+            {
+                MinColumns = 2,
+                MinRows = 2
+            });
+
+            // Create words that are all in a single column (no gaps)
+            var words = new List<Word>
+            {
+                CreateTestWord("Line1", 0, 100, 40, 12),
+                CreateTestWord("Line2", 0, 80, 40, 12),
+                CreateTestWord("Line3", 0, 60, 40, 12)
+            };
+
+            var tables = detector.DetectTables(words, null);
+
+            Assert.Empty(tables);
+        }
+
+        [Fact]
+        public void WhitespaceTableDetector_ReturnsEmptyForSingleRow()
+        {
+            var detector = new WhitespaceTableDetector(new WhitespaceTableDetector.WhitespaceTableDetectorOptions
+            {
+                MinColumns = 2,
+                MinRows = 2,
+                MinColumnGap = 10
+            });
+
+            // Create words that form a single row with two columns
+            var words = new List<Word>
+            {
+                CreateTestWord("Col1", 0, 100, 40, 12),
+                CreateTestWord("Col2", 100, 100, 40, 12)
+            };
+
+            var tables = detector.DetectTables(words, null);
+
+            Assert.Empty(tables);
+        }
+
+        private static Word CreateTestWord(string text, double x, double y, double width, double height)
+        {
+            // Create a mock word using letters
+            var letters = new List<Letter>();
+            
+            // Create a simple letter for each character
+            double charWidth = width / Math.Max(text.Length, 1);
+            for (int i = 0; i < text.Length; i++)
+            {
+                var startPoint = new PdfPoint(x + i * charWidth, y);
+                var endPoint = new PdfPoint(x + (i + 1) * charWidth, y);
+                var glyphRect = new PdfRectangle(x + i * charWidth, y, x + (i + 1) * charWidth, y + height);
+                
+                var letter = new Letter(
+                    text[i].ToString(),
+                    glyphRect,
+                    glyphRect,
+                    startPoint,
+                    endPoint,
+                    charWidth,
+                    height,
+                    (FontDetails)null!,
+                    TextRenderingMode.Fill,
+                    null,
+                    null,
+                    12,
+                    1);
+                letters.Add(letter);
+            }
+
+            return new Word(letters);
         }
     }
 }
