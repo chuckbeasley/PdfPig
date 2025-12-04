@@ -8,7 +8,7 @@ namespace UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor
     using System.Text;
     using UglyToad.PdfPig.Content;
     using UglyToad.PdfPig.Core;
-    using UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetection;
+    using UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetector;
     using UglyToad.PdfPig.Util;
 
     /// <summary>

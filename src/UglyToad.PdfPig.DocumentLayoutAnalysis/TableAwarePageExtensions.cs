@@ -3,7 +3,7 @@
 namespace UglyToad.PdfPig.DocumentLayoutAnalysis
 {
     using UglyToad.PdfPig.Content;
-    using UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetection;
+    using UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetector;
     using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 
     /// <summary>

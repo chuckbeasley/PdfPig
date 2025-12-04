@@ -5,7 +5,7 @@ namespace UglyToad.PdfPig.Tests.Dla
     using UglyToad.PdfPig.Content;
     using UglyToad.PdfPig.Core;
     using UglyToad.PdfPig.DocumentLayoutAnalysis;
-    using UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetection;
+    using UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetector;
     using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
     using UglyToad.PdfPig.Graphics;
     using UglyToad.PdfPig.Graphics.Core;
