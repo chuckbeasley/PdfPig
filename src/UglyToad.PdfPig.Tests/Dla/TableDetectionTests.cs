@@ -367,6 +367,171 @@ namespace UglyToad.PdfPig.Tests.Dla
             Assert.Empty(tables);
         }
 
+        // AutomaticTableDetector Tests
+
+        [Fact]
+        public void AutomaticTableDetector_DefaultInstance_IsNotNull()
+        {
+            Assert.NotNull(AutomaticTableDetector.Instance);
+        }
+
+        [Fact]
+        public void AutomaticTableDetector_ReturnsEmptyWhenNoWordsOrPaths()
+        {
+            var detector = new AutomaticTableDetector();
+            var words = new List<Word>();
+
+            var tables = detector.DetectTables(words, null);
+
+            Assert.Empty(tables);
+        }
+
+        [Fact]
+        public void AutomaticTableDetector_UsesRuledLineWhenPathsAvailable()
+        {
+            var detector = new AutomaticTableDetector();
+
+            // Create a simple 2x2 table grid with lines
+            var paths = new List<PdfPath>();
+
+            var path = new PdfPath();
+            path.SetStroked();
+            var horizontalSubpath1 = CreateHorizontalLine(0, 0, 100);
+            var horizontalSubpath2 = CreateHorizontalLine(0, 50, 100);
+            var horizontalSubpath3 = CreateHorizontalLine(0, 100, 100);
+            path.Add(horizontalSubpath1);
+            path.Add(horizontalSubpath2);
+            path.Add(horizontalSubpath3);
+
+            var verticalSubpath1 = CreateVerticalLine(0, 0, 100);
+            var verticalSubpath2 = CreateVerticalLine(50, 0, 100);
+            var verticalSubpath3 = CreateVerticalLine(100, 0, 100);
+            path.Add(verticalSubpath1);
+            path.Add(verticalSubpath2);
+            path.Add(verticalSubpath3);
+
+            paths.Add(path);
+
+            var tables = detector.DetectTables(new List<Word>(), paths);
+
+            Assert.Single(tables);
+            Assert.Equal(2, tables[0].RowCount);
+            Assert.Equal(2, tables[0].ColumnCount);
+        }
+
+        [Fact]
+        public void AutomaticTableDetector_FallsBackToWhitespaceWhenNoRuledLines()
+        {
+            var detector = new AutomaticTableDetector(new AutomaticTableDetector.AutomaticTableDetectorOptions
+            {
+                WhitespaceOptions = new WhitespaceTableDetector.WhitespaceTableDetectorOptions
+                {
+                    MinColumns = 2,
+                    MinRows = 2,
+                    MinColumnGap = 10,
+                    LineTolerance = 5
+                }
+            });
+
+            // Create words that form a 2x2 table:
+            // Row 1: "Name" at (0,100), "Age" at (100,100)
+            // Row 2: "John" at (0,80), "25" at (100,80)
+            var words = new List<Word>
+            {
+                CreateTestWord("Name", 0, 100, 40, 12),
+                CreateTestWord("Age", 100, 100, 30, 12),
+                CreateTestWord("John", 0, 80, 40, 12),
+                CreateTestWord("25", 100, 80, 20, 12)
+            };
+
+            // No paths, so should use whitespace detection
+            var tables = detector.DetectTables(words, null);
+
+            Assert.Single(tables);
+            Assert.Equal(2, tables[0].RowCount);
+            Assert.Equal(2, tables[0].ColumnCount);
+        }
+
+        [Fact]
+        public void AutomaticTableDetector_PrefersRuledLineOverWhitespace()
+        {
+            var detector = new AutomaticTableDetector(new AutomaticTableDetector.AutomaticTableDetectorOptions
+            {
+                WhitespaceOptions = new WhitespaceTableDetector.WhitespaceTableDetectorOptions
+                {
+                    MinColumns = 2,
+                    MinRows = 2,
+                    MinColumnGap = 10,
+                    LineTolerance = 5
+                },
+                RuledLineOptions = new RuledLineTableDetector.RuledLineTableDetectorOptions
+                {
+                    MinHorizontalLines = 2,
+                    MinVerticalLines = 2,
+                    MinLineLength = 5
+                }
+            });
+
+            // Create both ruled lines and words
+            var paths = new List<PdfPath>();
+            var path = new PdfPath();
+            path.SetStroked();
+            // Create 3x2 grid (3 rows, 2 columns)
+            path.Add(CreateHorizontalLine(0, 0, 100));
+            path.Add(CreateHorizontalLine(0, 33, 100));
+            path.Add(CreateHorizontalLine(0, 66, 100));
+            path.Add(CreateHorizontalLine(0, 100, 100));
+            path.Add(CreateVerticalLine(0, 0, 100));
+            path.Add(CreateVerticalLine(50, 0, 100));
+            path.Add(CreateVerticalLine(100, 0, 100));
+            paths.Add(path);
+
+            // Also create words that could form a 2x2 table
+            var words = new List<Word>
+            {
+                CreateTestWord("Name", 0, 100, 40, 12),
+                CreateTestWord("Age", 100, 100, 30, 12),
+                CreateTestWord("John", 0, 80, 40, 12),
+                CreateTestWord("25", 100, 80, 20, 12)
+            };
+
+            var tables = detector.DetectTables(words, paths);
+
+            // Should prefer ruled-line detection which creates 3x2 grid
+            Assert.Single(tables);
+            Assert.Equal(3, tables[0].RowCount);
+            Assert.Equal(2, tables[0].ColumnCount);
+        }
+
+        [Fact]
+        public void AutomaticTableDetector_ReturnsEmptyWhenFallbackDisabled()
+        {
+            var detector = new AutomaticTableDetector(new AutomaticTableDetector.AutomaticTableDetectorOptions
+            {
+                UseWhitespaceFallback = false
+            });
+
+            // Words only, no paths - should return empty since fallback is disabled
+            var words = new List<Word>
+            {
+                CreateTestWord("Name", 0, 100, 40, 12),
+                CreateTestWord("Age", 100, 100, 30, 12),
+                CreateTestWord("John", 0, 80, 40, 12),
+                CreateTestWord("25", 100, 80, 20, 12)
+            };
+
+            var tables = detector.DetectTables(words, null);
+
+            Assert.Empty(tables);
+        }
+
+        [Fact]
+        public void AutomaticTableDetector_ThrowsOnNullOptions()
+        {
+            Assert.Throws<System.ArgumentNullException>(() =>
+                new AutomaticTableDetector(null!));
+        }
+
         private static Word CreateTestWord(string text, double x, double y, double width, double height)
         {
             // Create a mock word using letters
