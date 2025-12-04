@@ -1,6 +1,6 @@
 #nullable enable
 
-namespace UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetection
+namespace UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetector
 {
     using System.Collections.Generic;
     using UglyToad.PdfPig.Content;

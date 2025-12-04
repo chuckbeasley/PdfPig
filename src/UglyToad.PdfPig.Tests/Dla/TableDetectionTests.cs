@@ -3,7 +3,7 @@ namespace UglyToad.PdfPig.Tests.Dla
     using System.Collections.Generic;
     using UglyToad.PdfPig.Content;
     using UglyToad.PdfPig.Core;
-    using UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetection;
+    using UglyToad.PdfPig.DocumentLayoutAnalysis.TableDetector;
     using UglyToad.PdfPig.Graphics;
     using UglyToad.PdfPig.Graphics.Core;
     using UglyToad.PdfPig.PdfFonts;
