@@ -29,7 +29,7 @@ namespace UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor
             public ITableDetector? TableDetector { get; set; }
 
             /// <summary>
-            /// The word extractor to use. If null, uses <see cref="DefaultWordExtractor"/>.
+            /// The word extractor to use. If null, uses the default word extractor.
             /// </summary>
             public IWordExtractor? WordExtractor { get; set; }
 
