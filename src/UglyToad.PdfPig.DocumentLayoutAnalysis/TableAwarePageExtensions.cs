@@ -68,5 +68,28 @@ namespace UglyToad.PdfPig.DocumentLayoutAnalysis
                 TableDetector = detector
             });
         }
+
+        /// <summary>
+        /// Extracts text from the page with awareness of table structures using automatic table detection.
+        /// The detector first tries ruled-line detection (for tables with visible borders/lines),
+        /// and falls back to whitespace-based detection if no ruled-line tables are found.
+        /// Tables are integrated inline with the document text flow in reading order.
+        /// </summary>
+        /// <param name="page">The page to extract text from.</param>
+        /// <param name="detectorOptions">Options for the automatic table detector. If null, defaults are used.</param>
+        /// <returns>The extraction result containing formatted text and detected tables.</returns>
+        public static TableAwareTextExtractor.ExtractionResult GetTextWithAutoDetectedTables(
+            this Page page,
+            AutomaticTableDetector.AutomaticTableDetectorOptions? detectorOptions = null)
+        {
+            var detector = detectorOptions != null
+                ? new AutomaticTableDetector(detectorOptions)
+                : AutomaticTableDetector.Instance;
+
+            return TableAwareTextExtractor.GetText(page, new TableAwareTextExtractor.Options
+            {
+                TableDetector = detector
+            });
+        }
     }
 }
